@@ -4,6 +4,11 @@ import datetime
 from django.shortcuts import render
 import requests
 
+class InvalidApiKey(Exception):
+    def __init__(self, message="Invalid API Key"):
+        self.message = message
+        super().__init__(self.message)
+
 def index(request):
     API_KEY = ""
     current_weather_url = "https://api.openweathermap.org/data/2.5/weather?q={}&appid={}"
@@ -13,11 +18,16 @@ def index(request):
         city1 = request.POST["city1"]
         city2 = request.POST.get("city2", None)
 
-        weather_data1, daily_forecasts1 = fetch_weather_and_forecast(city1, API_KEY, current_weather_url, forecast_url)
-        if city2:
-            weather_data2, daily_forecasts2 = fetch_weather_and_forecast(city2, API_KEY, current_weather_url, forecast_url)
-        else:
-            weather_data2, daily_forecasts2 = None, None
+        try:
+            weather_data1, daily_forecasts1 = fetch_weather_and_forecast(city1, API_KEY, current_weather_url, forecast_url)
+            if city2:
+                weather_data2, daily_forecasts2 = fetch_weather_and_forecast(city2, API_KEY, current_weather_url, forecast_url)
+            else:
+                weather_data2, daily_forecasts2 = None, None
+        except InvalidApiKey:
+            return render(request, "weather/index.html", {'error_message': "We couldn't get weather info."})
+        except KeyError:
+            return render(request, "weather/index.html")
 
         context = {
             "weather_data1" : weather_data1,
@@ -34,6 +44,9 @@ def index(request):
 
 def fetch_weather_and_forecast(city, api_key, current_weather_url, forecast_url):
     response = requests.get(current_weather_url.format(city, api_key)).json()
+    if response['cod'] == 401:
+        raise InvalidApiKey
+    
     lat, lon = response['coord']['lat'], response['coord']['lon']
 
     forecast_response = requests.get(forecast_url.format(lat, lon, api_key)).json()
